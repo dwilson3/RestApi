@@ -14,27 +14,27 @@ var io = socketio.listen(server);
 
 router.use(express.static(path.resolve(__dirname, 'client')));
 var messages = [];
-var sockets = [];
+var holders = [];
 
-io.on('connection', function (socket) {
+io.on('connection', function (holder) {
     messages.forEach(function (data) {
-      socket.emit('message', data);
+      holder.emit('message', data);
     });
 
-    sockets.push(socket);
+    holders.push(holder);
 
-    socket.on('disconnect', function () {
-      sockets.splice(sockets.indexOf(socket), 1);
+    holder.on('disconnect', function () {
+      holders.splice(holders.indexOf(holder), 1);
       updateRoster();
     });
 
-    socket.on('message', function (msg) {
+    holder.on('message', function (msg) {
       var text = String(msg || '');
 
       if (!text)
         return;
 
-      socket.get('name', function (err, name) {
+      holder.get('name', function (err, name) {
         var data = {
           name: name,
           text: text
@@ -45,8 +45,8 @@ io.on('connection', function (socket) {
       });
     });
 
-    socket.on('identify', function (name) {
-      socket.set('name', String(name || 'Anonymous'), function (err) {
+    holder.on('identify', function (name) {
+      holder.set('name', String(name || 'Anonymous'), function (err) {
         updateRoster();
       });
     });
@@ -54,9 +54,9 @@ io.on('connection', function (socket) {
 
 function updateRoster() {
   async.map(
-    sockets,
-    function (socket, callback) {
-      socket.get('name', callback);
+    holders,
+    function (holder, callback) {
+      holder.get('name', callback);
     },
     function (err, names) {
       broadcast('roster', names);
@@ -65,8 +65,8 @@ function updateRoster() {
 }
 
 function broadcast(event, data) {
-  sockets.forEach(function (socket) {
-    socket.emit(event, data);
+  holders.forEach(function (holder) {
+    holder.emit(event, data);
   });
 }
 
