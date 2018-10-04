@@ -1,34 +1,103 @@
+var http = require('http');
+var path = require('path');
+var async = require('async');
+var socketio = require('socket.io');
 var express = require('express');
-var app = express();
+var getdata = require('test_data/getdata.json');
+var postdata = require('test_data/postdata.json');
+var router = express();
+var server = http.createServer(router);
+var io = socketio.listen(server);
 
-    app.get('/', function(request, response)
-    {  
-    response.send(__dirname  +" https://server/review/:reviewid"); 
+router.use(express.static(path.resolve(__dirname, 'client')));
+var messages = [];
+var sockets = [];
+
+io.on('connection', function (socket) {
+    messages.forEach(function (data) {
+      socket.emit('message', data);
     });
-    
-    app.get('/', function(request, response)
-    {  
-    response.send(__dirname  +" https://server/review/:n/:stars"); 
+
+    sockets.push(socket);
+
+    socket.on('disconnect', function () {
+      sockets.splice(sockets.indexOf(socket), 1);
+      updateRoster();
     });
-    
-    app.get('/', function(request, response)
-    {  
-    response.send(__dirname  +" https://server/review/:n/:from_date/:to_date"); 
+
+    socket.on('message', function (msg) {
+      var text = String(msg || '');
+
+      if (!text)
+        return;
+
+      socket.get('name', function (err, name) {
+        var data = {
+          name: name,
+          text: text
+        };
+
+        broadcast('message', data);
+        messages.push(data);
+      });
     });
-    
-    app.post('/', function(request, response)
-    {  
-    response.send(__dirname  +" https://server/review/:reviewid"); 
+
+    socket.on('identify', function (name) {
+      socket.set('name', String(name || 'Anonymous'), function (err) {
+        updateRoster();
+      });
     });
-    
-    app.put('/', function(request, response)
-    {  
-    response.send(__dirname  +" https://server/review/:reviewid"); 
-    });
-    
-    app.delete('/', function(request, response)
-    {  
-    response.send(__dirname  +" https://server/review/:reviewid"); 
-    });
-    
-app.listen(8080);
+  });
+
+function updateRoster() {
+  async.map(
+    sockets,
+    function (socket, callback) {
+      socket.get('name', callback);
+    },
+    function (err, names) {
+      broadcast('roster', names);
+    }
+  );
+}
+
+function broadcast(event, data) {
+  sockets.forEach(function (socket) {
+    socket.emit(event, data);
+  });
+}
+
+//Get a review
+router.get('/review/:reviewid', function(req, res){
+    res.json(getdata);
+});
+
+//Get random reviews by stars
+router.get('/review/:n/:stars', function(req, res){
+    res.json(getdata);
+});
+
+//Get random reviews by dat
+router.get('/review/:n/:from_date/:to_date', function(res, req){
+    res.json(getdata);
+});
+
+//Add a review
+router.post('/review', function(req, res) {
+    res.json(postdata);
+});
+
+//Update a review
+router.put('/:reviewid', function(req, res){
+    res.json(postdata);
+});
+
+//Delete a review
+router.delete('/:reviewid', function(req, res){
+    res.json(postdata);
+});
+
+server.listen(process.env.PORT || 3000, process.env.IP || "0.0.0.0", function(){
+  var addr = server.address();
+  console.log("Chat server listening at", addr.address + ":" + addr.port);
+});
